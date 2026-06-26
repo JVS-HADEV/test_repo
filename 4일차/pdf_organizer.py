@@ -3,7 +3,7 @@ PDF 분류·정리 프로그램
 
 1. pdf_samples 폴더의 PDF 목록 파악
 2. RAG로 핵심 조각을 수집한 뒤 요약
-3. 비슷한 주제끼리 10글자 이내 폴더명으로 묶기
+3. 대분류(논문/보도자료/학칙 등) 폴더로 묶기
 4. PDF를 해당 폴더로 이동
 
 4.5 pdf 정리 agent.py 의 RAG 함수를 재사용합니다.
@@ -41,16 +41,35 @@ build_pdf_index = pdf_agent.build_pdf_index
 search_chunks = pdf_agent.search_chunks
 
 RAG_QUERIES = [
+    "이 문서의 유형과 목적",
     "이 문서의 주제와 핵심 내용",
-    "저자가 다루는 문제와 결론",
-    "문서의 분야와 키워드",
-    "문서의 유형과 목적",
+    "이 문서가 규정 보도자료 논문 중 무엇인지",
 ]
 
+# 허용되는 대분류 폴더명
+ALLOWED_CATEGORIES = ["논문", "보도자료", "학칙", "기타"]
 
-def list_root_pdfs() -> List[Path]:
-    """pdf_samples 루트에 있는 PDF만 수집 (_catalog 제외)."""
-    return sorted(DOC_LIBRARY.glob("*.pdf"))
+CATEGORY_ALIASES = {
+    "규정": "학칙",
+    "학칙": "학칙",
+    "대학원학칙": "학칙",
+    "보도": "보도자료",
+    "보도자료": "보도자료",
+    "논문": "논문",
+    "paper": "논문",
+    "기타": "기타",
+    "기타문서": "기타",
+}
+
+
+def list_pdfs() -> List[Path]:
+    """pdf_samples 아래 PDF 수집 (_catalog 제외, 하위 폴더 포함)."""
+    pdfs = []
+    for pdf in DOC_LIBRARY.rglob("*.pdf"):
+        if "_catalog" in pdf.parts:
+            continue
+        pdfs.append(pdf)
+    return sorted(pdfs, key=lambda p: str(p).lower())
 
 
 def rag_collect_context(pdf_name: str, top_k: int = 4) -> str:
@@ -78,6 +97,7 @@ def rag_collect_context(pdf_name: str, top_k: int = 4) -> str:
 def summarize_pdf(pdf_name: str) -> str:
     """RAG로 수집한 조각을 바탕으로 PDF를 요약한다."""
     context = rag_collect_context(pdf_name)
+    categories = ", ".join(ALLOWED_CATEGORIES)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.1,
@@ -86,24 +106,43 @@ def summarize_pdf(pdf_name: str) -> str:
                 "role": "system",
                 "content": (
                     "너는 문서 분류를 돕는 요약 도우미다. "
-                    "아래 조각만 근거로 3~5문장 한국어 요약을 작성하라. "
-                    "문서 유형(규정/보도자료/논문 등)과 핵심 주제를 반드시 포함하라."
+                    "아래 조각만 근거로 요약하라. "
+                    "반드시 아래 형식을 지켜라:\n"
+                    "문서 대분류: (다음 중 하나만) %s\n"
+                    "한 줄 요약: (1문장)\n"
+                    "세부 주제는 적지 말고, 문서 종류(대분류) 판단에 집중하라."
+                    % categories
                 ),
             },
             {
                 "role": "user",
-                "content": f"PDF 파일명: {pdf_name}\n\n[검색된 조각]\n{context}",
+                "content": "PDF 파일명: %s\n\n[검색된 조각]\n%s" % (pdf_name, context),
             },
         ],
     )
     return (response.choices[0].message.content or "").strip()
 
 
+def normalize_category(name: str) -> str:
+    """폴더명을 허용된 대분류 중 하나로 정규화한다."""
+    cleaned = sanitize_folder_name(name)
+    if cleaned in ALLOWED_CATEGORIES:
+        return cleaned
+    if cleaned in CATEGORY_ALIASES:
+        return CATEGORY_ALIASES[cleaned]
+    for allowed in ALLOWED_CATEGORIES:
+        if allowed in cleaned or cleaned in allowed:
+            return allowed
+    return "기타"
+
+
 def assign_folder_names(summaries: Dict[str, str]) -> Dict[str, str]:
-    """요약을 보고 비슷한 문서끼리 같은 10글자 이내 폴더명을 배정한다."""
+    """요약을 보고 대분류 폴더명을 배정한다."""
     summary_block = "\n\n".join(
-        f"- {pdf_name}\n  요약: {summary}" for pdf_name, summary in summaries.items()
+        "- %s\n  요약: %s" % (pdf_name, summary)
+        for pdf_name, summary in summaries.items()
     )
+    categories = ", ".join(ALLOWED_CATEGORIES)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.1,
@@ -112,14 +151,17 @@ def assign_folder_names(summaries: Dict[str, str]) -> Dict[str, str]:
                 "role": "system",
                 "content": (
                     "너는 문서 분류 전문가다. "
-                    "비슷한 주제/유형의 PDF는 같은 폴더명을 사용하라. "
-                    "폴더명 규칙: 한국어, 공백 없이, 10글자 이내, Windows 폴더명 가능. "
-                    "반드시 JSON만 출력: {\"pdf파일명.pdf\": \"폴더명\", ...}"
+                    "각 PDF를 대분류 폴더 하나에만 배정하라. "
+                    "세부 주제별 폴더는 만들지 말 것. "
+                    "예: 모든 학술 논문은 '논문', 회사 보도자료는 '보도자료', 학칙·규정은 '학칙'. "
+                    "폴더명은 반드시 다음 중 하나만 사용: %s. "
+                    "반드시 JSON만 출력: {\"pdf파일명.pdf\": \"대분류\", ...}"
+                    % categories
                 ),
             },
             {
                 "role": "user",
-                "content": f"다음 PDF 요약을 보고 폴더명을 정하라.\n\n{summary_block}",
+                "content": "다음 PDF 요약을 보고 대분류 폴더명을 정하라.\n\n%s" % summary_block,
             },
         ],
     )
@@ -129,8 +171,8 @@ def assign_folder_names(summaries: Dict[str, str]) -> Dict[str, str]:
 
     cleaned: Dict[str, str] = {}
     for pdf_name in summaries:
-        folder = folder_map.get(pdf_name, "기타문서")
-        cleaned[pdf_name] = sanitize_folder_name(folder)
+        folder = folder_map.get(pdf_name, "기타")
+        cleaned[pdf_name] = normalize_category(folder)
     return cleaned
 
 
@@ -143,30 +185,20 @@ def sanitize_folder_name(name: str, max_len: int = 10) -> str:
     return name[:max_len]
 
 
-def unique_folder_path(base_name: str, existing: set) -> str:
-    """같은 이름이 있으면 숫자 접미사를 붙인다."""
-    candidate = base_name
-    counter = 2
-    while candidate in existing:
-        suffix = str(counter)
-        candidate = base_name[: max(1, 10 - len(suffix))] + suffix
-        counter += 1
-    existing.add(candidate)
-    return candidate
-
-
-def move_pdfs(folder_map: Dict[str, str], dry_run: bool = False) -> List[dict]:
-    """PDF를 지정된 폴더로 이동한다."""
+def move_pdfs(
+    pdf_paths: Dict[str, Path],
+    folder_map: Dict[str, str],
+    dry_run: bool = False,
+) -> List[dict]:
+    """PDF를 지정된 대분류 폴더로 이동한다."""
     results = []
-    used_names = set()
 
     for pdf_name, folder_name in folder_map.items():
-        src = DOC_LIBRARY / pdf_name
-        if not src.exists():
+        src = pdf_paths.get(pdf_name)
+        if src is None or not src.exists():
             results.append({"pdf_name": pdf_name, "status": "missing"})
             continue
 
-        folder_name = unique_folder_path(folder_name, used_names)
         dest_dir = DOC_LIBRARY / folder_name
         dest = dest_dir / pdf_name
 
@@ -183,7 +215,8 @@ def move_pdfs(folder_map: Dict[str, str], dry_run: bool = False) -> List[dict]:
             continue
 
         dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dest))
+        if src.resolve() != dest.resolve():
+            shutil.move(str(src), str(dest))
         results.append(
             {
                 "pdf_name": pdf_name,
@@ -227,29 +260,30 @@ def organize_pdfs(dry_run: bool = False) -> None:
     print("대상 폴더:", DOC_LIBRARY)
     print("=" * 60)
 
-    pdfs = list_root_pdfs()
+    pdfs = list_pdfs()
+    pdf_paths = {pdf.name: pdf for pdf in pdfs}
     print("\n[1] PDF 파일 목록 (%d개)" % len(pdfs))
     for pdf in pdfs:
-        print("  -", pdf.name)
+        print("  -", pdf.relative_to(DOC_LIBRARY))
 
     if not pdfs:
         print("정리할 PDF가 없습니다.")
         return
 
-    print("\n[2] RAG 기반 요약 생성")
+    print("\n[2] RAG 기반 요약 생성 (대분류 판단용)")
     summaries: Dict[str, str] = {}
     for pdf in pdfs:
         print("  요약 중:", pdf.name)
         summaries[pdf.name] = summarize_pdf(pdf.name)
         print("   →", summaries[pdf.name][:80], "...")
 
-    print("\n[3] 폴더명 배정 (10글자 이내, 유사 주제 묶음)")
+    print("\n[3] 대분류 폴더 배정 (%s)" % ", ".join(ALLOWED_CATEGORIES))
     folder_map = assign_folder_names(summaries)
     for pdf_name, folder in folder_map.items():
         print("  %s → [%s]" % (pdf_name, folder))
 
     print("\n[4] PDF 이동")
-    move_results = move_pdfs(folder_map, dry_run=dry_run)
+    move_results = move_pdfs(pdf_paths, folder_map, dry_run=dry_run)
     for item in move_results:
         print("  %s → %s (%s)" % (item["pdf_name"], item.get("folder", "-"), item["status"]))
 
