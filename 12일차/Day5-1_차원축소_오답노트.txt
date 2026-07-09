@@ -1,0 +1,113 @@
+====================================================================
+ 머신러닝 Day 5-1. 차원 축소 (Feature Selection: mRMR, Boruta)
+ - 3) Vibe Coding 실습 오답노트
+ (질문-답변 정리 + 개념 보충 + 과제별 주요 라이브러리/함수 설명)
+====================================================================
+
+* 데이터: day5-1_data.csv (반도체 공정 센서 통계 → Y 회귀, 139행 × 117열 전처리 후)
+* 전처리: 자재구분·END_DATE_TIME 삭제, 결측 컬럼·분산 0 컬럼 제거
+* 핵심 변수: selected_mrmr (best_k), selected_boruta_final (confirmed + tentative)
+
+
+####################################################################
+[1] 사전 퀴즈 (5문항) — 전부 정답
+####################################################################
+
+Q1. 다중공선성(Multicollinearity)이란?
+내 답변: ① (②번 선택지 = X 변수들끼리 강하게 상관)
+채점: 정답
+
+해설:
+    - 입력 변수(X)끼리 서로 강하게 상관되어 회귀 계수 해석이 불안정해지는 현상.
+    - Y와 X 상관이 높은 것(①)은 "종속·독립 관계"이지 다중공선성이 아님.
+    - 히트맵에서 붉은 블록(상관 ↑)이 많으면 다중공선성 의심.
+
+
+Q2. mRMR 선택 원리
+내 답변: ① Maximum Relevance + Minimum Redundancy
+채점: 정답
+
+해설:
+    - Relevance: 각 X와 Y의 상관(관련성)을 크게.
+    - Redundancy: 이미 선택된 X와 새 후보 X의 상관(중복)을 작게.
+    - Greedy하게 k개까지 하나씩 추가.
+    - 하이퍼파라미터 k = 최종 선택 변수 개수.
+
+
+Q3. Boruta Shadow Feature 역할
+내 답변: ② 원본을 셔플한 기준선, 이것보다 중요도 높아야 유의미
+채점: 정답
+
+해설:
+    - Shadow = 원본 feature 값을 무작위 permute한 가짜 변수.
+    - RF feature importance가 shadow 최대치보다 크면 "Confirmed".
+    - "우연히 높은 중요도"와 구분하는 통계적 기준선 역할.
+
+
+Q4. Feature Selection vs Extraction
+내 답변: ① Selection은 원본 변수명 유지, Extraction은 새 조합(PCA 등)
+채점: 정답
+
+해설:
+    - mRMR, Boruta → Selection (해석 가능, 원본 컬럼 그대로).
+    - PCA → Extraction (주성분 = 변수 선형결합, 직접 해석 어려움).
+    - 둘 다 차원 축소(Dimensionality Reduction) 범주.
+
+
+Q5. mRMR vs Boruta 결과가 다른 이유
+내 답변: ① mRMR은 k 고정, Boruta는 all-relevant 통계 판별
+채점: 정답
+
+해설:
+    - mRMR: 개수 k를 미리 정하고, 상관 기반 중복 최소화.
+    - Boruta: 개수 고정 없이 shadow 대비 유의미한 변수 전부 탐색.
+    - RF 비선형·교호작용 vs Pearson 선형 상관 → 선택 집합이 달라질 수 있음.
+
+
+####################################################################
+[2] [과제1] mRMR vs Boruta 변수 비교 — 실행 결과 요약
+####################################################################
+
+실행 결과 (random_state=42, test_size=0.3):
+    - best_k = 3 (mRMR)
+    - best_n = 5 (Boruta tentative 추가 개수)
+    - mRMR 선택 (3): CROT.MEAN4, PC.STDDEV5, TAE.MEAN6
+    - Boruta 최종 (6): TAE.MEAN7, TAE.MEAN5, TAE.STDDEV13, TAE.MEAN10, TAE.MEAN12, CROT.MEAN13
+    - 공통 변수: 0개
+    - mRMR only: 3개 / Boruta only: 6개
+    - 평균 |상관|: 전체 > Boruta(0.45) > mRMR(0.13) → mRMR이 중복 제거에 더 aggressive
+
+해석 포인트:
+    1) 공통 0개 → 두 방법의 "좋은 변수" 정의가 다름 (중복 최소 vs 통계적 유의).
+    2) Boruta는 TAE 파생 통계 다수 → RF 관점 Y 예측 기여 큰 유사 센서군.
+    3) mRMR은 공정·센서 종류 분산(CROT, PC, TAE 각 1개) → 해석·보고용으로 깔끔.
+    4) 성능 표(Section 2-3)와 함께 보면 "적은 변수+낮은 상관" vs "많은 변수+높은 상관" trade-off 확인.
+
+
+--------------------------------------------------------------------
+[과제1] 주요 라이브러리/함수
+--------------------------------------------------------------------
+- mrmr_regression(X, y, K=k)
+    회귀용 mRMR. K개 변수명(list) 반환.
+
+- BorutaPy(rf, n_estimators='auto', max_iter=10, perc=100)
+    .fit(X.values, y.ravel()) 후 support_(확정), support_weak_(미정) boolean mask.
+
+- set(selected_mrmr) & set(selected_boruta_final)
+    두 방법 공통 선택 변수 (교집합).
+
+- abs(X[cols].corr()).1).values[np.triu_indices(n, k=1)].mean()
+    선택 변수 평균 절대 상관 → 다중공선성 완화 정도 참고.
+
+
+####################################################################
+[3] 암기 체크리스트 (Day 5-1)
+####################################################################
+
+□ 다중공선성 = X끼리 상관 ↑ (Y-X 상관 아님)
+□ mRMR = Relevance ↑ + Redundancy ↓, k 고정
+□ Boruta Shadow = permuted baseline, RF importance 비교
+□ Selection(원본 유지) vs Extraction(PCA, 새 축)
+□ mRMR 상관↓ / Boruta 유의 변수 다수 → 결과 다를 수 있음
+
+====================================================================

@@ -1,0 +1,126 @@
+====================================================================
+ 머신러닝 Day 5-2. SHAP Value
+ - 4) Vibe Coding 실습 오답노트
+ (질문-답변 정리 + 개념 보충 + 과제별 주요 라이브러리/함수 설명)
+====================================================================
+
+* 데이터:
+  - 회귀: day5-2_reg_data.csv (X1~X?, y)
+  - 분류: day5-2_cls_data.csv (X1~X474, Y ∈ {-1, 1})
+* 모델: RandomForestRegressor / RandomForestClassifier
+* SHAP: TreeExplainer → shap_values 계산
+
+
+####################################################################
+[1] 사전 퀴즈 (5문항) — 4/5
+####################################################################
+
+Q1. SHAP value 의미
+내 답변: ② baseline 대비 각 변수가 예측을 얼마나 밀었는지
+채점: 정답
+
+해설:
+    - SHAP = Shapley Additive exPlanations.
+    - 예측 = expected_value(baseline) + Σ(SHAP_i).
+    - 양수 SHAP → 해당 변수가 예측을 올림, 음수 → 내림.
+    - ①은 RF feature_importances_(분할 기여) 설명.
+
+
+Q2. Random Forest용 Explainer
+내 답변: ② TreeExplainer
+채점: 정답
+
+해설:
+    - 트리 기반 모델(RF, XGB, LightGBM 등)에 최적화, 빠름.
+    - KernelExplainer: 모델 무관하지만 느림(샘플링).
+    - Linear/Deep: 각각 선형·딥러닝 전용.
+
+
+Q3. feature_importances_ vs SHAP
+내 답변: ① FI는 전역·방향 없음, SHAP은 샘플별 ± 기여
+채점: 정답
+
+해설:
+    - feature_importances_: 전체 데이터에서 impurity 감소 합(평균) → "얼마나 썼나".
+    - SHAP: 개별 샘플마다 "이 값이 예측에 +/− 얼마" → Force Plot 가능.
+    - 순위는 비슷할 수 있으나 정의가 다름.
+
+
+Q4. Summary Plot (Scatter) 빨간색
+내 답변: ① 변수 값이 높을수록 예측을 올리는 방향
+채점: 정답
+
+해설:
+    - x축: SHAP value (영향력), y축: 변수명, 색: feature 실제 값.
+    - 빨강(높은 값) + 양의 SHAP → 값이 클수록 예측 ↑.
+    - 파랑(낮은 값) + 음의 SHAP → 값이 작을수록 예측 ↓.
+    - Bar plot은 mean |SHAP|만 보여 방향 정보 없음.
+
+
+Q5. 분류 shap_values_cls에서 클래스 1 SHAP
+내 답변: ① shap_values_cls[:, :, 0]
+채점: 오답 → 정답 ② shap_values_cls[:, :, 1]
+
+해설:
+    - shape: (샘플 수, 변수 수, 클래스 수).
+    - [:, :, 0] → 클래스 -1에 대한 SHAP.
+    - [:, :, 1] → 클래스 1에 대한 SHAP.
+    - 분류 해석 시 "어느 클래스 기준인지" 반드시 명시.
+    - 암기: 인덱스 0 = 첫 번째 클래스(-1), 1 = 두 번째 클래스(1).
+
+
+####################################################################
+[2] [과제1] RF importance vs SHAP 비교 — 실행 결과 요약
+####################################################################
+
+회귀 (Top-5):
+    RF / SHAP 공통: X10, X3, X46, X26, X33 (5/5 일치)
+    Spearman 순위 상관 ≈ 1.0
+
+분류 class 1 (Top-5):
+    RF: X29, X126, X378, X27, X116
+    SHAP: X29, X378, X126, X27, X119
+    공통 4/5 (X116 vs X119 차이)
+    Spearman ≈ 1.0 (전체 변수 기준)
+
+차이가 나는 이유 (순위가 비슷해도):
+    1) RF FI: 분할 빈도·불순도 감소 합 (교호작용 분산)
+    2) SHAP: Shapley 기반 공정 배분 → 상관 변수 간 기여 재분배
+    3) 분류: 클래스별 SHAP이 다름 → 목표 클래스 지정 필수
+    4) SHAP만 Force/Dependence로 개별 샘플·비선형 관계 설명 가능
+
+
+--------------------------------------------------------------------
+[과제1] 주요 라이브러리/함수
+--------------------------------------------------------------------
+- shap.TreeExplainer(model)
+    트리 모델 전용 빠른 SHAP 계산기.
+
+- explainer.shap_values(X)
+    회귀: (n_samples, n_features)
+    분류: (n_samples, n_features, n_classes)
+
+- np.abs(shap_values).mean(axis=0)
+    Summary bar plot과 유사한 전역 중요도(방향 제거).
+
+- shap.summary_plot(vals, X, plot_type='bar')
+    변수별 mean |SHAP| 막대图.
+
+- shap.force_plot(expected_value, shap_vals[i], X.iloc[i])
+    단일 샘플 기여 시각화.
+
+- spearmanr(rf_importance, mean_abs_shap)
+    두 중요도 순위 일치도 (1에 가까울수록 유사).
+
+
+####################################################################
+[3] 암기 체크리스트 (Day 5-2)
+####################################################################
+
+□ SHAP = baseline + Σ(변수별 기여), ± 방향 있음
+□ TreeExplainer = RF/XGB 등 트리 모델
+□ FI = 전역, 방향 없음 / SHAP = 샘플별 방향 있음
+□ Scatter summary: 빨강=높은 값, SHAP 부호와 함께 해석
+□ 분류 SHAP: [:,:,0]=class -1, [:,:,1]=class 1
+
+====================================================================

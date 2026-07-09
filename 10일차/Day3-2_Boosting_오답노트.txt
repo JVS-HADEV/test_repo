@@ -1,0 +1,238 @@
+====================================================================
+ 머신러닝 Day 3-2. GBM, XGBoost, LightGBM, CatBoost
+ - 3) Vibe Coding 실습 오답노트
+ (질문-답변 정리 + 과제별 주요 라이브러리/함수 설명)
+====================================================================
+
+* 분류 데이터: Machine Failure (day3-2_cls_data.csv)
+  -> 타겟: Failure (No/Yes), 불균형 분류
+* 회귀 데이터: Concrete (day3-2_reg_data.csv)
+  -> 타겟: Concrete_compressive_strength
+* Section 3 과제는 분류 데이터(X_train, Y_train, X_test, Y_test) 기준
+
+
+####################################################################
+[1] [과제1] XGBoost vs LightGBM 학습 시간·성능 비교
+####################################################################
+
+Q1. LightGBM이 XGBoost보다 빠른 이유 중 하나는?
+
+내 답변:
+    leaf-wise 를 사용
+
+채점: 정답
+
+해설:
+    - XGBoost: 기본 level-wise (층별로 트리 성장)
+    - LightGBM: leaf-wise (손실이 큰 잎부터 우선 성장)
+    - 추가로 LightGBM은 histogram 기반 분할 등으로 속도 최적화.
+    - 단, 데이터 크기·파라미터·환경에 따라 실제 시간은 달라질 수 있음.
+
+
+Q2. 학습 시간 측정 함수는?
+
+내 답변:
+    perf_counter
+
+채점: 정답
+
+해설:
+    start = time.perf_counter()
+    model.fit(...)
+    elapsed = time.perf_counter() - start
+
+
+Q3. Machine Failure 분류에서 성능 비교 지표는?
+
+내 답변:
+    ?
+
+채점: 오답 (미응답)
+
+해설:
+    - F1-score 사용 (불균형 분류)
+    - Accuracy만 보면 다수 클래스(No)에 치우쳐 높게 나올 수 있음.
+
+
+실제 실행 결과(예시):
+    Model     | Train Time(sec) | F1
+    ----------|-----------------|------
+    XGBoost   | 0.31            | 0.842
+    LightGBM  | 5.63            | 0.872
+
+    -> LightGBM이 항상 더 빠른 것은 아님. 시간과 F1을 함께 비교해야 함.
+
+
+--------------------------------------------------------------------
+[과제1] 주요 라이브러리/함수
+--------------------------------------------------------------------
+- XGBClassifier(random_state=0, eval_metric="logloss")
+- LGBMClassifier(random_state=0, verbose=-1)
+- time.perf_counter() : 학습 시간 측정
+- f1_score(y_true, y_pred) : F1 비교
+
+
+####################################################################
+[2] [과제2] 4개 모델 변수 중요도 비교
+####################################################################
+
+Q1. 변수 중요도를 꺼내는 공통 속성은?
+
+내 답변:
+    feature_importances_
+
+채점: 정답
+
+해설:
+    GBM, XGBoost, LightGBM, CatBoost sklearn API 모두
+    model.feature_importances_ 사용 가능 (학습 후).
+
+
+Q2. 4개 모델 중요도를 한눈에 비교할 시각화는?
+
+내 답변:
+    barplot
+
+채점: 정답
+
+해설:
+    - melt()로 long 형태 변환 후 sns.barplot(hue="Model")
+    - 변수별로 4색 막대를 나란히 배치해 비교.
+
+
+Q3. 모델 간 중요도 순위 일치도를 수치로 보려면?
+
+내 답변:
+    ?
+
+채점: 오답 (미응답)
+
+해설:
+    - Spearman 상관계수 (순위 기반)
+    - importance_df.corr(method="spearman")
+    - Pearson은 값 크기 비교 -> 순위 비교에는 Spearman이 적합.
+
+
+--------------------------------------------------------------------
+[추가 질문] LightGBM 중요도 값이 유난히 큰 이유?
+--------------------------------------------------------------------
+
+질문:
+    LightGBM 중요도가 세 자리 등으로 다른 모델보다 크게 나오는 이유?
+
+해설:
+    - 중요도는 모델마다 계산 방식·스케일이 다름 (직접 크기 비교 X)
+    - GBM/XGBoost: 보통 합이 1에 가까운 비율(0~1)
+    - LightGBM 기본값 importance_type='split': 분할 횟수(정규화 안 됨)
+      -> 수백 같은 큰 수 가능
+    - 공정 비교 방법:
+      1) 각 모델 중요도를 합=1로 정규화
+      2) 순위 기반 Spearman 상관계수 사용 (Step 4)
+    - LightGBM 옵션: importance_type='gain' 으로 변경 가능 (그래도 완전 동일 척도는 아님)
+
+
+--------------------------------------------------------------------
+[과제2] 코드 단계 요약
+--------------------------------------------------------------------
+Step 1: 4개 모델 fit -> importance_dict에 feature_importances_ 저장
+Step 2: pd.DataFrame(importance_dict) -> importance_topk (상위 k개)
+Step 3: melt + sns.barplot(hue="Model") 시각화
+Step 4: importance_df.corr(method="spearman") + heatmap
+
+
+####################################################################
+[3] [과제3] Stacking Ensemble
+####################################################################
+
+Q1. base model과 meta model의 역할은?
+
+내 답변:
+    base model: meta model 학습에 사용될 각각의 다른 ML model
+    meta model: base model으로 예측한 data를 사용하여 학습한 모델
+
+채점: 정답
+
+해설:
+    - 1단계(base): GBM, XGBoost, LightGBM, CatBoost 등이 각각 예측
+    - 2단계(meta): base들의 예측을 입력으로 최종 결합 학습
+    - sklearn StackingClassifier는 cv로 base 예측을 만들어
+      학습 데이터 누수(leakage)를 방지함.
+
+
+Q2. sklearn Stacking 분류기 클래스 이름은?
+
+내 답변:
+    ?
+
+채점: 오답 (미응답)
+
+해설:
+    from sklearn.ensemble import StackingClassifier
+
+    stack = StackingClassifier(
+        estimators=base_estimators,
+        final_estimator=LogisticRegression(),
+        cv=5
+    )
+
+
+Q3. Stacking이 단일 앙상블보다 항상 더 좋은가?
+
+내 답변:
+    예
+
+채점: 오답
+
+해설:
+    - Stacking이 항상 최고 성능을 보장하지 않음.
+    - base model이 비슷하거나 meta model이 부적절하면 효과 미미.
+    - 오히려 단일 모델이 더 나을 수 있음.
+
+실제 실행 결과(예시):
+    Model      | F1
+    -----------|------
+    LightGBM   | 0.872  <- 단일 최고
+    GBM        | 0.850
+    Stacking   | 0.842
+    XGBoost    | 0.842
+    CatBoost   | 0.842
+
+    -> Stacking < LightGBM 단일 모델 (이번 데이터)
+
+
+--------------------------------------------------------------------
+[과제3] 주요 라이브러리/함수
+--------------------------------------------------------------------
+- StackingClassifier(estimators, final_estimator, cv=5)
+    여러 base model + meta model로 2단계 앙상블 구성.
+
+- final_estimator=LogisticRegression()
+    meta model로 로지스틱 회귀 자주 사용 (가볍고 해석 쉬움).
+
+- estimators=[("이름", 모델), ...]
+    base model 리스트 (튜플 형태).
+
+
+====================================================================
+ 핵심 정리 (Day 3-2에서 자주 헷갈리는 개념)
+====================================================================
+
+1. LightGBM vs XGBoost 속도
+   -> 이론상 LGBM이 빠를 수 있지만, 항상 그런 것은 아님
+
+2. 불균형 분류 지표
+   -> F1 (Accuracy 함정 주의)
+
+3. feature_importances_ 스케일
+   -> 모델마다 다름. LightGBM split은 특히 큼. 순위/Spearman으로 비교
+
+4. Spearman vs Pearson (중요도 순위)
+   -> Spearman (순위 일치도)
+
+5. Stacking
+   -> StackingClassifier / 항상 더 좋지 않음 / 실험으로 확인
+
+6. leaf-wise vs level-wise
+   -> LightGBM: leaf-wise / XGBoost: level-wise(기본)
+
+====================================================================

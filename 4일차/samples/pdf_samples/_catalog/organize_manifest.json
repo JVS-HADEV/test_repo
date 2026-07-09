@@ -1,0 +1,89 @@
+{
+  "organized_at": "2026-06-26T10:46:21",
+  "documents": [
+    {
+      "pdf_name": "data2vec.pdf",
+      "summary": "문서 대분류: 논문  \n한 줄 요약: 데이터 표현 학습을 위한 새로운 접근 방식인 data2vec에 대한 연구를 다룬 논문이다.",
+      "folder": "논문",
+      "move": {
+        "pdf_name": "data2vec.pdf",
+        "folder": "논문",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\self학습\\data2vec.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\논문\\data2vec.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "supervised-contrastive-learning-Paper.pdf",
+      "summary": "문서 대분류: 논문  \n한 줄 요약: 이 문서는 감독 대조 학습에 관한 연구 내용을 담고 있다.",
+      "folder": "논문",
+      "move": {
+        "pdf_name": "supervised-contrastive-learning-Paper.pdf",
+        "folder": "논문",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\대조학습\\supervised-contrastive-learning-Paper.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\논문\\supervised-contrastive-learning-Paper.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "학칙.pdf",
+      "summary": "문서 대분류: 학칙  \n한 줄 요약: 이 문서는 학칙에 관한 내용을 담고 있다.",
+      "folder": "학칙",
+      "move": {
+        "pdf_name": "학칙.pdf",
+        "folder": "학칙",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\대학원학칙\\학칙.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\학칙\\학칙.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "Physics-Guided Deep Learning.pdf",
+      "summary": "문서 대분류: 논문  \n한 줄 요약: 물리학을 기반으로 한 딥러닝에 관한 연구를 다룬 논문이다.",
+      "folder": "논문",
+      "move": {
+        "pdf_name": "Physics-Guided Deep Learning.pdf",
+        "folder": "논문",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\물리딥러닝\\Physics-Guided Deep Learning.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\논문\\Physics-Guided Deep Learning.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "보도자료.pdf",
+      "summary": "문서 대분류: 보도자료  \n한 줄 요약: 해당 문서는 보도자료 형식으로 작성되었다.",
+      "folder": "보도자료",
+      "move": {
+        "pdf_name": "보도자료.pdf",
+        "folder": "보도자료",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\보도자료\\보도자료.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\보도자료\\보도자료.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "NeurIPS-2023-analyzing-vision-transformers-for-image-classification-in-class-embedding-space-Paper-Conference.pdf",
+      "summary": "문서 대분류: 논문  \n한 줄 요약: 이 문서는 이미지 분류를 위한 비전 트랜스포머 분석에 관한 연구를 다룬 논문이다.",
+      "folder": "논문",
+      "move": {
+        "pdf_name": "NeurIPS-2023-analyzing-vision-transformers-for-image-classification-in-class-embedding-space-Paper-Conference.pdf",
+        "folder": "논문",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\비전트랜스\\NeurIPS-2023-analyzing-vision-transformers-for-image-classification-in-class-embedding-space-Paper-Conference.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\논문\\NeurIPS-2023-analyzing-vision-transformers-for-image-classification-in-class-embedding-space-Paper-Conference.pdf",
+        "status": "moved"
+      }
+    },
+    {
+      "pdf_name": "A survey on large language model based autonomous agents.pdf",
+      "summary": "문서 대분류: 논문  \n한 줄 요약: 대규모 언어 모델 기반 자율 에이전트에 대한 조사 연구를 다룬 문서이다.",
+      "folder": "논문",
+      "move": {
+        "pdf_name": "A survey on large language model based autonomous agents.pdf",
+        "folder": "논문",
+        "from": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\자율에이전트\\A survey on large language model based autonomous agents.pdf",
+        "to": "C:\\Users\\Admin\\Desktop\\AI Autonomous\\cursor\\4일차\\samples\\pdf_samples\\논문\\A survey on large language model based autonomous agents.pdf",
+        "status": "moved"
+      }
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+====================================================================
+ 머신러닝 Day 4-2. Under 및 Oversampling
+ - 4) Vibe Coding 실습 오답노트
+ (질문-답변 정리 + 개념 보충 + 과제별 주요 라이브러리/함수 설명)
+====================================================================
+
+* 데이터: day4-2_data.csv (AI4I 예지보전, 10,000행 × 8열)
+  -> 특성: Air temperature, Process temperature, Rotational speed, Torque,
+           Tool wear, Type_L, Type_M
+  -> 타겟: Machine failure (0=Normal, 1=Failure)
+* 클래스 불균형:
+  -> Normal 9,661개 (96.6%) / Failure 339개 (3.4%)
+  -> train Failure 약 271개 / Normal 약 7,729개 (stratify split 후)
+* 해결 기법 후보: Resampling (Under/Over) 또는 One-Class Learning
+
+
+####################################################################
+[1] [과제1] t-SNE 해석 + Resampling vs One-Class Learning
+####################################################################
+
+Q1. Resampling은 train에만 적용하고, test는 원본 불균형을 유지하는 이유는?
+
+내 답변:
+    과대적합 문제를 발생시킬 수 있음
+
+채점: 오답
+
+해설:
+    - test에 Resampling을 하면 "실제 운영 환경과 다른 분포"로 평가하게 됨.
+    - test는 원본 불균형 그대로 유지해야 모델 성능을 현실적으로 측정 가능.
+    - 과대적합은 train에 Oversampling(SMOTE 등)을 할 때 우려되는 점이지,
+      test를 원본으로 두는 이유와는 다름.
+
+    정답 요약:
+        test = 실제 세상 그대로 / train = 모델이 배우기 좋게 조정
+
+
+Q2. SMOTE와 Random Oversampling의 차이는?
+
+내 답변:
+    SMOTE는 interpolation으로 sample을 증강함
+
+채점: 정답
+
+해설:
+    - Random Oversampling: 소수 클래스 샘플을 단순 복제 (duplicate).
+    - SMOTE: 소수 클래스 샘플 k개 이웃 사이를 보간(interpolation)해
+      새로운 가상 샘플(synthetic) 생성.
+    - SMOTE는 다양성이 늘지만, 노이즈 샘플 근처에 잘못된 합성 샘플이
+      생길 수도 있음 (경계/노이즈에 민감).
+
+
+Q3. Failure 3.4%인 이 문제에서 Resampling vs One-Class Learning 중 더 적합한 접근은?
+
+내 답변:
+    One-Class Learning, Failure 데이터가 너무 적음
+
+채점: 부분 정답
+
+해설:
+    - Failure가 적다는 점은 맞고, One-Class도 "후보"가 될 수 있음.
+    - 하지만 339개는 지도학습 + Resampling이 가능한 수준.
+    - One-Class는 라벨된 Failure 정보를 거의 쓰지 않음
+      → 이미 있는 고장 데이터를 활용하지 못함.
+    - 실습 결과: TomekLinks(F1≈0.77) > SMOTE/ADASYN(F1≈0.64)
+      → 이 데이터에는 Resampling이 더 적합.
+
+    | 접근              | 이 데이터에서                              |
+    |-------------------|--------------------------------------------|
+    | Resampling        | Failure 라벨 339개 활용 가능, 실습 성능 우위 |
+    | One-Class Learning| 라벨 수십 개 미만·미지 이상 탐지 시 보조 고려 |
+
+    최종 선택: Resampling (특히 TomekLinks + F1 기준 평가)
+
+
+--------------------------------------------------------------------
+[과제1] t-SNE 기법별 해석 요약
+--------------------------------------------------------------------
+    | 기법         | t-SNE에서 보이는 분포 변화                          |
+    |--------------|-----------------------------------------------------|
+    | Before       | Failure(빨강) 점이 매우 적고 Normal(파랑)에 묻혀 있음 |
+    | TomekLinks   | 경계 겹치는 Normal 일부 제거 → 클래스 경계 정리     |
+    | SMOTE        | Failure 점 대폭 증가, 1:1에 가깝게 확장              |
+    | SMOTE+Tomek  | SMOTE 확장 후 경계 겹침 정리 → SMOTE보다 경계 깔끔  |
+    | ADASYN       | 분류 어려운 경계 부근에 Failure 가상 샘플 집중 생성  |
+
+
+실제 실행 결과 (XGBoost, test 기준):
+    Method       | Precision | Recall | F1-score
+    -------------|-----------|--------|----------
+    Before       | 0.7027    | 0.7647 | 0.7324
+    TomekLinks   | 0.7432    | 0.8088 | 0.7746   ← 최고 F1
+    SMOTE        | 0.5714    | 0.7647 | 0.6541
+    SMOTE+Tomek  | 0.5532    | 0.7647 | 0.6420
+    ADASYN       | 0.5400    | 0.7941 | 0.6429
+
+    → Oversampling이 항상 좋은 것은 아님. 이 데이터는 Under(TomekLinks)가 우수.
+    → SMOTE/ADASYN은 Recall은 높지만 Precision 하락 → F1 종합에서는 불리.
+
+
+--------------------------------------------------------------------
+[과제1] 주요 라이브러리/함수
+--------------------------------------------------------------------
+- imblearn.under_sampling.TomekLinks()
+    서로 다른 클래스가 너무 가까운 다수(Normal) 샘플 제거 (Undersampling)
+
+- imblearn.over_sampling.SMOTE()
+    소수 클래스 샘플 사이 보간으로 가상 샘플 생성 (Oversampling, 1:1)
+
+- imblearn.combine.SMOTETomek()
+    SMOTE 후 TomekLinks로 경계 정리 (복합 Resampling)
+
+- imblearn.over_sampling.ADASYN(random_state=42)
+    분류 어려운 경계 근처에 소수 클래스 샘플을 더 많이 생성
+
+- sampler.fit_resample(X_train, Y_train)
+    학습 데이터에만 Resampling 적용, X·Y 쌍 반환
+
+- train_test_split(..., stratify=Y)
+    train/test 분할 시 클래스 비율 유지
+
+- TSNE(n_components=2, perplexity=30, random_state=42)
+    고차원 데이터를 2D로 축소해 시각화 (클래스 분리 정도 확인용)
+
+- XGBClassifier(scale_pos_weight=neg/pos)
+    불균형 비율을 모델에 반영 (소수 클래스 가중치 증가)
+
+- f1_score(Y_test, pred, pos_label=1)
+    불균형 분류 성능 평가 (Failure=1 기준)
+
+
+####################################################################
+[2] Section 1~3 핵심 정리 (복습용)
+####################################################################
+
+Resampling 기법 비교:
+    | 기법         | 유형   | 클래스 수 변화        | 핵심 아이디어                    |
+    |--------------|--------|-----------------------|----------------------------------|
+    | TomekLinks   | Under  | Normal 소폭 감소      | 경계 겹치는 다수 샘플 제거       |
+    | SMOTE        | Over   | Failure → Normal 수준| k-NN 보간으로 가상 샘플 생성     |
+    | SMOTE+Tomek  | 복합   | 1:1 근처              | Over 후 경계 정리                |
+    | ADASYN       | Over   | 1:1 근처(가변)        | 어려운 구간에 더 많이 생성       |
+
+Resampling 적용 원칙:
+    - train에만 적용 (fit_resample)
+    - test는 원본 불균형 유지
+    - 평가 지표: F1-score (Accuracy만 보면 다수 클래스에 치우침)
+
+One-Class Learning (개념):
+    - 정상(Normal) 데이터만으로 "정상 패턴" 학습
+    - 패턴에서 벗어나면 이상(Failure)으로 판단
+    - 소수 클래스 라벨이 극히 적을 때 유리
+    - 단, 라벨된 Failure 정보를 충분히 활용하지 못함
+
+
+####################################################################
+[3] 자주 헷갈리는 포인트
+####################################################################
+
+1. test에 Resampling 하면 안 되는 이유
+    - 과대적합 때문이 아니라 "평가 분포가 현실과 달라지기" 때문.
+    - 실제 서비스는 3.4% 불균형 상태 → test도 그대로 유지.
+
+2. SMOTE vs Random Oversampling
+    - Random Over = 복제 / SMOTE = 보간으로 새 샘플 생성.
+
+3. Oversampling = 무조건 성능 향상 X
+    - SMOTE/ADASYN은 가상 샘플이 경계를 흐릴 수 있어 Precision 하락 가능.
+    - 이 실습: TomekLinks(Under)가 F1 최고.
+
+4. Resampling vs scale_pos_weight
+    - Resampling: 데이터 자체를 늘리거나 줄임.
+    - scale_pos_weight: 데이터는 그대로, 모델이 소수 클래스를 더 중요하게 학습.
+    - 둘 다 불균형 대응이지만 메커니즘이 다름 (병행 가능).
+
+5. Resampling vs One-Class Learning
+    - Failure 라벨이 수백 개 있으면 → Resampling + 지도학습 우선.
+    - Failure 라벨이 거의 없거나(수십 개 미만) 이상 탐지가 목표 → One-Class.
+    - Day 4-3 SVDD가 One-Class 계열.
+
+6. t-SNE 해석 주의
+    - t-SNE는 시각화용. 거리/클러스터가 절대적 진실은 아님.
+    - perplexity, random_state에 따라 모양이 달라질 수 있음.
+    - "경향"을 보는 도구로 사용.
+
+7. 평가 지표 선택
+    - 불균형 분류: F1-score 우선 (Recall·Precision 균형).
+    - Accuracy만 보면 "전부 Normal 예측"해도 96% 이상 나올 수 있음.
