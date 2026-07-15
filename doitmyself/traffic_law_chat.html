@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>도로교통법 상담 Agent</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      max-width: 720px;
+      margin: 32px auto;
+      padding: 0 16px;
+      color: #1c1c1e;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-top: 0; }
+    .warning {
+      background: #fff8e6;
+      border: 1px solid #f2d98a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #7a5b00;
+      margin: 12px 0 20px;
+    }
+    #chat {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      height: 460px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg { max-width: 88%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; line-height: 1.5; font-size: 0.92rem; }
+    .msg.user { align-self: flex-end; background: #0b84ff; color: #fff; border-bottom-right-radius: 2px; }
+    .msg.bot { align-self: flex-start; background: #fff; border: 1px solid #e2e2e2; border-bottom-left-radius: 2px; }
+    .msg.bot.error { border-color: #e0a0a0; background: #fff2f2; color: #8a1f1f; }
+    .sources { margin-top: 8px; font-size: 0.78rem; color: #555; border-top: 1px dashed #ddd; padding-top: 6px; }
+    .sources div { padding: 2px 0; }
+    .meta { font-size: 0.72rem; color: #999; margin-top: 4px; }
+    .row { display: flex; gap: 8px; margin: 14px 0; }
+    textarea {
+      flex: 1;
+      resize: none;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-family: inherit;
+    }
+    button { padding: 0 16px; border-radius: 8px; border: none; background: #0b84ff; color: #fff; cursor: pointer; font-size: 0.9rem; }
+    button:disabled { background: #a9c9f5; cursor: default; }
+    button.secondary { background: #eee; color: #333; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+    .examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+    .example {
+      font-size: 0.78rem;
+      padding: 6px 10px;
+      background: #eef4ff;
+      border-radius: 14px;
+      cursor: pointer;
+      color: #0b5fd6;
+      border: 1px solid #d7e6ff;
+    }
+    .err { color: #b00020; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>도로교통법 전문 상담 Agent</h1>
+  <p class="subtitle">하이브리드 RAG(벡터 + BM25) · LangGraph 기반 · FastAPI 서버</p>
+  <div class="warning">
+    ⚠️ 이 챗봇은 교육·정보 제공용이며 변호사의 법률 자문을 대체하지 않습니다.
+    이름, 차량번호, 연락처 등 개인정보는 입력하지 마세요.
+  </div>
+
+  <div id="chat"></div>
+  <p id="error" class="err"></p>
+
+  <div class="row">
+    <textarea id="question" rows="2" placeholder="예: 혈중알코올농도 0.05% 상태로 운전하면 어떤 처벌을 받을 수 있나요?"></textarea>
+    <button id="send">전송</button>
+  </div>
+  <div class="toolbar">
+    <label style="font-size:0.8rem; color:#555;">
+      <input type="checkbox" id="showSources" checked /> 검색 근거 표시
+    </label>
+    <button id="reset" class="secondary">새 상담 시작</button>
+  </div>
+  <div class="examples" id="examples"></div>
+
+  <script>
+    const chatEl = document.getElementById('chat');
+    const questionEl = document.getElementById('question');
+    const sendBtn = document.getElementById('send');
+    const resetBtn = document.getElementById('reset');
+    const showSourcesEl = document.getElementById('showSources');
+    const errorEl = document.getElementById('error');
+    const examplesEl = document.getElementById('examples');
+
+    const EXAMPLES = [
+      '혈중알코올농도 0.05% 상태로 운전하면 어떤 처벌을 받을 수 있나요?',
+      '신호 없는 횡단보도에서 보행자와 사고가 났습니다. 어떤 사실을 확인해야 하나요?',
+      '전동킥보드를 술을 마시고 타면 자동차 음주운전과 처벌이 같나요?',
+      '면허 없이 아파트 주차장에서 운전한 경우에도 무면허운전인가요?',
+    ];
+
+    const STORAGE_KEY = 'traffic-law-thread-id';
+    let threadId = localStorage.getItem(STORAGE_KEY);
+
+    function showError(message) {
+      errorEl.textContent = message || '';
+    }
+
+    function addMessage(role, text, sources, meta) {
+      const wrap = document.createElement('div');
+      wrap.className = `msg ${role}`;
+      wrap.textContent = text;
+
+      if (sources && sources.length) {
+        const box = document.createElement('div');
+        box.className = 'sources';
+        box.innerHTML = '<strong>검색 근거</strong>';
+        sources.forEach((s) => {
+          const line = document.createElement('div');
+          line.textContent = `[${s.type}] ${s.label}`;
+          box.appendChild(line);
+        });
+        wrap.appendChild(box);
+      }
+      if (meta) {
+        const metaEl = document.createElement('div');
+        metaEl.className = 'meta';
+        metaEl.textContent = meta;
+        wrap.appendChild(metaEl);
+      }
+      chatEl.appendChild(wrap);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    async function ensureThread() {
+      if (threadId) return threadId;
+      const res = await fetch('/session', { method: 'POST' });
+      const data = await res.json();
+      threadId = data.thread_id;
+      localStorage.setItem(STORAGE_KEY, threadId);
+      return threadId;
+    }
+
+    async function send() {
+      const question = questionEl.value.trim();
+      if (!question) return;
+      showError('');
+      addMessage('user', question);
+      questionEl.value = '';
+      sendBtn.disabled = true;
+
+      try {
+        const tid = await ensureThread();
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question,
+            thread_id: tid,
+            show_sources: showSourcesEl.checked,
+          }),
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(() => ({}));
+          throw new Error(detail.detail || `서버 오류 (${res.status})`);
+        }
+        const data = await res.json();
+        addMessage('bot', data.answer, data.sources, `응답 시간: ${data.response_seconds}s`);
+      } catch (e) {
+        addMessage('bot error', '오류가 발생했습니다: ' + e.message);
+      } finally {
+        sendBtn.disabled = false;
+        questionEl.focus();
+      }
+    }
+
+    async function resetSession() {
+      showError('');
+      try {
+        if (threadId) {
+          await fetch('/chat/' + encodeURIComponent(threadId), { method: 'DELETE' });
+        }
+      } catch (e) {
+        // 초기화 실패는 무시하고 새 세션으로 진행
+      }
+      localStorage.removeItem(STORAGE_KEY);
+      threadId = null;
+      chatEl.innerHTML = '';
+      addMessage('bot', '새 상담을 시작합니다. 궁금한 상황을 입력해 주세요.');
+    }
+
+    sendBtn.addEventListener('click', send);
+    questionEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+    resetBtn.addEventListener('click', resetSession);
+
+    EXAMPLES.forEach((text) => {
+      const chip = document.createElement('div');
+      chip.className = 'example';
+      chip.textContent = text;
+      chip.onclick = () => {
+        questionEl.value = text;
+        questionEl.focus();
+      };
+      examplesEl.appendChild(chip);
+    });
+
+    addMessage('bot', '안녕하세요. 도로교통법·판례를 검색해 답변하는 상담 Agent입니다. 사고 상황이나 위반 여부가 궁금한 내용을 입력해 주세요.');
+  </script>
+</body>
+</html>
